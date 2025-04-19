@@ -1,0 +1,6 @@
+torch>=2.0.1
+git+https://github.com/linto-ai/whisper-timestamped.git
+openai-whisper==20230314
+ffmpeg-python>=0.2.0
+requests>=2.26.0
+python-dotenv>=0.19.0
