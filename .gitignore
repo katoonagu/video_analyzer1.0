@@ -1,3 +1,17 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+.vscode/
+
+# Данные
+*.mp4
+*.wav
+/output_clips/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
