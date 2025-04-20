@@ -48,8 +48,7 @@ def parse_timestamps(text):
     return segments
 
 
-def convert_to_audio(input_file):
-    audio_file = "temp_audio.wav"
+def convert_to_audio(input_file, output_file):
     try:
         subprocess.run([
             'ffmpeg', '-hide_banner', '-loglevel', 'error',
@@ -58,9 +57,9 @@ def convert_to_audio(input_file):
             '-acodec', 'pcm_s16le',
             '-ar', '16000',
             '-ac', '1',
-            '-y', audio_file
+            '-y', output_file
         ], check=True)
-        return audio_file
+        return output_file
     except subprocess.CalledProcessError as e:
         print(f"FFmpeg error: {e}")
         sys.exit(1)
@@ -280,13 +279,18 @@ def format_time(td):
 
 def process_media(input_file, segments):
     try:
-        output_dir = os.path.join(os.getcwd(), "output_clips")
+        # Create output directory based on input filename
+        video_name = os.path.splitext(os.path.basename(input_file))[0]
+        output_dir = os.path.join(os.getcwd(), video_name)
         os.makedirs(output_dir, exist_ok=True)
 
         print("\n=== Video Analysis Process ===")
-        print("[1/4] Converting to audio...")
         print(f"Input file: {input_file}")
-        audio_file = convert_to_audio(input_file)
+        print(f"Output directory: {output_dir}")
+
+        print("\n[1/4] Converting to audio...")
+        audio_file = os.path.join(output_dir, "temp_audio.wav")
+        convert_to_audio(input_file, audio_file)
         print(f"✓ Audio conversion complete: {audio_file}")
 
         print("\n[2/4] Transcribing audio...")
