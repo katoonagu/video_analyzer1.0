@@ -7,8 +7,10 @@ import torch
 import requests
 from datetime import timedelta
 import whisper_timestamped
-import os
 from pathlib import Path
+import os
+os.environ['SILERO_CACHE_DIR'] = os.path.expanduser('~/.cache/silero')
+os.makedirs(os.environ['SILERO_CACHE_DIR'], exist_ok=True)
 
 # Скачать модели при первом запуске
 if not Path(os.path.expanduser("~/.cache/whisper/small.pt")).exists():

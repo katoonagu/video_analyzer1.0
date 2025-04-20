@@ -9,3 +9,5 @@ python-dotenv==1.0.0
 onnxruntime==1.17.1
 transformers==4.36.2
 tokenizers==0.15.2
+silero==0.4.1
+onnxruntime==1.16.3
