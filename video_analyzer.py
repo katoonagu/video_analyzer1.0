@@ -1,4 +1,3 @@
-import os
 import re
 import sys
 import argparse
@@ -8,7 +7,15 @@ import torch
 import requests
 from datetime import timedelta
 import whisper_timestamped
+import os
+from pathlib import Path
 
+# Скачать модели при первом запуске
+if not Path(os.path.expanduser("~/.cache/whisper/small.pt")).exists():
+    os.system("whisper --model small --download-model")
+
+if not Path(os.path.expanduser("~/.cache/torch/hub/checkpoints/silero_vad.jit")).exists():
+    os.system("python -c 'from silero import vad; vad()'")
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
@@ -116,7 +123,17 @@ def split_media(input_file, segments, output_dir):
 
 
 def generate_analysis(text, output_path):
-    API_KEY = "sk-34032fc2894c45b2870fefa6d882860e"
+    API_KEY_FILE = "deepseek_api_key.txt"
+
+    if not os.path.exists(API_KEY_FILE):
+        raise FileNotFoundError(f"API key file {API_KEY_FILE} not found")
+
+    with open(API_KEY_FILE, 'r', encoding='utf-8') as f:
+        API_KEY = f.read().strip()
+
+    if not API_KEY:
+        raise ValueError("API key is empty in the key file")
+
     API_URL = "https://api.deepseek.com/v1/chat/completions"
 
     prompt = f"""
