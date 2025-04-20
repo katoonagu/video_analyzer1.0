@@ -1,13 +1,24 @@
+# Core PyTorch packages
 torch==2.0.1
 torchvision==0.15.2
 torchaudio==2.0.2
+
+# Audio processing
 git+https://github.com/linto-ai/whisper-timestamped.git
 openai-whisper==20230314
 ffmpeg-python==0.2.0
+
+# API and utilities
 requests==2.32.3
 python-dotenv==1.0.0
-onnxruntime==1.17.1
+
+# Machine learning
 transformers==4.36.2
 tokenizers==0.15.2
-silero==0.4.1
-onnxruntime==1.16.3
+onnxruntime==1.17.1
+
+# Optional but recommended
+numpy>=1.24.0
+tqdm>=4.65.0
+soundfile>=0.12.1
+librosa>=0.10.0

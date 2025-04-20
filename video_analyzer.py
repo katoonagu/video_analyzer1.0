@@ -9,6 +9,8 @@ from datetime import timedelta
 import whisper_timestamped
 from pathlib import Path
 import os
+import torchaudio
+from torchaudio.functional import vad
 os.environ['SILERO_CACHE_DIR'] = os.path.expanduser('~/.cache/silero')
 os.makedirs(os.environ['SILERO_CACHE_DIR'], exist_ok=True)
 
@@ -17,7 +19,7 @@ if not Path(os.path.expanduser("~/.cache/whisper/small.pt")).exists():
     os.system("whisper --model small --download-model")
 
 if not Path(os.path.expanduser("~/.cache/torch/hub/checkpoints/silero_vad.jit")).exists():
-    os.system("python -c 'from silero import vad; vad()'")
+    os.system("python -c 'from silero_vad import vad; vad()'")
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
@@ -69,19 +71,76 @@ def convert_to_audio(input_file):
 
 
 def transcribe_audio(audio_file):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using {device.upper()} for transcription")
+    def get_device_info():
+        """Get detailed device information and handle CUDA initialization"""
+        try:
+            if torch.cuda.is_available():
+                device = torch.device("cuda")
+                # Check CUDA version compatibility
+                cuda_version = torch.version.cuda
+                print(f"CUDA version: {cuda_version}")
+                print(f"GPU: {torch.cuda.get_device_name(0)}")
+                print(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
+                return device
+            else:
+                print("CUDA not available, falling back to CPU")
+                return torch.device("cpu")
+        except Exception as e:
+            print(f"Error initializing CUDA: {e}")
+            return torch.device("cpu")
 
-    model = whisper_timestamped.load_model("small", device=device)
-    audio = whisper_timestamped.load_audio(audio_file)
+    def load_model_with_fallback(device):
+        """Load model with error handling and fallback"""
+        try:
+            model = whisper_timestamped.load_model("small", device=device)
+            return model
+        except RuntimeError as e:
+            if "out of memory" in str(e):
+                print("GPU out of memory, attempting to clear cache and retry...")
+                torch.cuda.empty_cache()
+                try:
+                    model = whisper_timestamped.load_model("small", device=device)
+                    return model
+                except RuntimeError:
+                    print("Still out of memory, falling back to CPU")
+                    return whisper_timestamped.load_model("small", device="cpu")
+            else:
+                print(f"GPU error: {e}\nFalling back to CPU")
+                return whisper_timestamped.load_model("small", device="cpu")
 
-    return whisper_timestamped.transcribe(
-        model,
-        audio,
-        language="ru",
-        vad=True,
-        beam_size=5
-    )
+    # Initialize device with error handling
+    device = get_device_info()
+    print(f"Using {device.type.upper()} for transcription")
+
+    # Load model with fallback mechanism
+    model = load_model_with_fallback(device)
+    
+    try:
+        # Load audio and perform transcription
+        audio = whisper_timestamped.load_audio(audio_file)
+        result = model.transcribe(
+            audio,
+            language="ru",
+            beam_size=5
+        )
+        return result
+    except Exception as e:
+        print(f"Error during transcription: {e}")
+        if device.type == "cuda":
+            print("Attempting CPU fallback...")
+            model = whisper_timestamped.load_model("small", device="cpu")
+            audio = whisper_timestamped.load_audio(audio_file)
+            return model.transcribe(
+                audio,
+                language="ru",
+                beam_size=5
+            )
+        else:
+            raise
+    finally:
+        # Clean up GPU memory
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
 
 
 def split_media(input_file, segments, output_dir):
@@ -140,7 +199,7 @@ def generate_analysis(text, output_path):
 
     prompt = f"""
     Проанализируй текст для контент-мейкера:
-    1. Краткая выжимка (до 500 символов) 
+    1. Краткая выжимка (до 1000 символов) 
     2. Ключевые моменты с таймкодами [ЧЧ:ММ:СС]
     3. Ключевые слова
     4. Анализ для YouTube
