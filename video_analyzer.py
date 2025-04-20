@@ -9,8 +9,6 @@ from datetime import timedelta
 import whisper_timestamped
 from pathlib import Path
 import os
-import torchaudio
-from torchaudio.functional import vad
 os.environ['SILERO_CACHE_DIR'] = os.path.expanduser('~/.cache/silero')
 os.makedirs(os.environ['SILERO_CACHE_DIR'], exist_ok=True)
 
@@ -18,8 +16,6 @@ os.makedirs(os.environ['SILERO_CACHE_DIR'], exist_ok=True)
 if not Path(os.path.expanduser("~/.cache/whisper/small.pt")).exists():
     os.system("whisper --model small --download-model")
 
-if not Path(os.path.expanduser("~/.cache/torch/hub/checkpoints/silero_vad.jit")).exists():
-    os.system("python -c 'from silero_vad import vad; vad()'")
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
@@ -118,11 +114,15 @@ def transcribe_audio(audio_file):
     try:
         # Load audio and perform transcription
         audio = whisper_timestamped.load_audio(audio_file)
+        
+        # Create a simple progress indicator
+        print("Starting transcription...")
         result = model.transcribe(
             audio,
             language="ru",
             beam_size=5
         )
+        print("✓ Transcription complete")
         return result
     except Exception as e:
         print(f"Error during transcription: {e}")
@@ -130,11 +130,14 @@ def transcribe_audio(audio_file):
             print("Attempting CPU fallback...")
             model = whisper_timestamped.load_model("small", device="cpu")
             audio = whisper_timestamped.load_audio(audio_file)
-            return model.transcribe(
+            print("Starting CPU transcription...")
+            result = model.transcribe(
                 audio,
                 language="ru",
                 beam_size=5
             )
+            print("✓ CPU transcription complete")
+            return result
         else:
             raise
     finally:
@@ -157,6 +160,9 @@ def split_media(input_file, segments, output_dir):
             f"{i + 1:03d}_{title.replace(' ', '_')}.{file_ext}"
         )
 
+        print(f"Processing segment {i + 1}/{len(segments)}: {title}")
+        print(f"Time range: {format_time(timedelta(seconds=start))} - {format_time(timedelta(seconds=end)) if end else 'end'}")
+
         cmd = ['ffmpeg', '-hide_banner', '-y',
                '-ss', str(start), '-i', input_file]
 
@@ -169,8 +175,9 @@ def split_media(input_file, segments, output_dir):
             subprocess.run(cmd, check=True,
                            stderr=subprocess.DEVNULL,
                            stdout=subprocess.DEVNULL)
+            print(f"✓ Segment {i + 1} saved: {output_file}")
         except subprocess.CalledProcessError as e:
-            print(f"Error splitting segment {i + 1}: {e}")
+            print(f"✗ Error processing segment {i + 1}: {e}")
             continue
 
         clips.append({
@@ -225,7 +232,9 @@ def generate_analysis(text, output_path):
 
 
 def create_subtitles(transcription, clips, output_dir):
-    for clip in clips:
+    print("\nGenerating subtitles and analysis for each clip...")
+    for i, clip in enumerate(clips, 1):
+        print(f"\nProcessing clip {i}/{len(clips)}: {clip['title']}")
         start = clip['start']
         end = clip['end'] or float('inf')
         clip_text = []
@@ -237,6 +246,7 @@ def create_subtitles(transcription, clips, output_dir):
             srt_path = f"{base_name}.srt"
             txt_path = f"{base_name}_analysis.txt"
 
+            print(f"Creating subtitle file: {srt_path}")
             with open(srt_path, 'w', encoding='utf-8') as f:
                 for idx, seg in enumerate(segments, 1):
                     start_time = timedelta(seconds=seg['start'] - start)
@@ -250,8 +260,14 @@ def create_subtitles(transcription, clips, output_dir):
                             f"{text_line}\n\n")
 
             if clip_text:
+                print(f"Generating analysis file: {txt_path}")
                 full_text = ' '.join(clip_text)
                 generate_analysis(full_text, txt_path)
+                print(f"✓ Analysis complete for clip {i}")
+            else:
+                print(f"✗ No text segments found for clip {i}")
+        else:
+            print(f"✗ No segments found for clip {i}")
 
 
 def format_time(td):
@@ -267,20 +283,32 @@ def process_media(input_file, segments):
         output_dir = os.path.join(os.getcwd(), "output_clips")
         os.makedirs(output_dir, exist_ok=True)
 
+        print("\n=== Video Analysis Process ===")
         print("[1/4] Converting to audio...")
+        print(f"Input file: {input_file}")
         audio_file = convert_to_audio(input_file)
+        print(f"✓ Audio conversion complete: {audio_file}")
 
-        print("[2/4] Transcribing audio...")
+        print("\n[2/4] Transcribing audio...")
+        print("Initializing transcription model...")
         transcription = transcribe_audio(audio_file)
+        print("✓ Transcription complete")
 
-        print("[3/4] Splitting media file...")
+        print("\n[3/4] Splitting media file...")
+        print(f"Processing {len(segments)} segments...")
         clips = split_media(input_file, segments, output_dir)
+        print(f"✓ Successfully split into {len(clips)} clips")
 
-        print("[4/4] Generating subtitles and analysis...")
+        print("\n[4/4] Generating subtitles and analysis...")
+        print("Creating subtitles and analysis files...")
         create_subtitles(transcription, clips, output_dir)
+        print("✓ Subtitles and analysis generated")
 
         os.remove(audio_file)
-        print(f"\nProcessing complete! Results saved to: {output_dir}")
+        print("\n=== Processing Complete ===")
+        print(f"Results saved to: {output_dir}")
+        print(f"Total segments processed: {len(clips)}")
+        print("===========================")
 
     except Exception as e:
         print(f"\nError: {str(e)}")
